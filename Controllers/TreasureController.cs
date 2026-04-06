@@ -170,9 +170,10 @@ public IActionResult AddToCart([FromBody] Models.CartModel cart)
                         ClientID = reader["ClientID"],
                         Productid = reader["Productid"],
                         Productimage = reader["Productimage"].ToString(),
-                        Productname = reader["Productname"].ToString(), // ADD THIS
+                        Productname = reader["Productname"].ToString(),
                         Quantity = Convert.ToInt32(reader["Quantity"]),
                         Price = Convert.ToDecimal(reader["TotalPrice"]),
+                        Productquentity = Convert.ToInt32(reader["Productquentity"])  // ADD
                     });
                 }
             }
@@ -289,7 +290,7 @@ public IActionResult AddToCart([FromBody] Models.CartModel cart)
 
 
 
- 
+
 
 
         [HttpPost]
@@ -297,19 +298,34 @@ public IActionResult AddToCart([FromBody] Models.CartModel cart)
         {
             try
             {
+                string message = "";
+
                 using (SqlConnection con = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
                 {
                     using (SqlCommand cmd = new SqlCommand("PlaceOrder", con))
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
+
+                        // Input parameter
                         cmd.Parameters.AddWithValue("@ClientID", ClientID);
+
+                        // Output parameter to get message from SQL
+                        SqlParameter msgParam = new SqlParameter("@Message", SqlDbType.VarChar, 500)
+                        {
+                            Direction = ParameterDirection.Output
+                        };
+                        cmd.Parameters.Add(msgParam);
 
                         con.Open();
                         cmd.ExecuteNonQuery();
+
+                        // Get the message from SQL
+                        message = msgParam.Value.ToString();
                     }
                 }
 
-                return Json(new { success = true, message = "Order placed successfully" });
+                // Return message to frontend
+                return Json(new { success = true, message = message });
             }
             catch (Exception ex)
             {
