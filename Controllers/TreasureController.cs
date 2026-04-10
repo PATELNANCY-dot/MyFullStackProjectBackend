@@ -3,6 +3,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using System.Data;
 using practiceApplication.Models;
+using MyFullStackProject.Models;
 
 
 namespace practiceApplication.Controllers
@@ -70,7 +71,6 @@ namespace practiceApplication.Controllers
             }
         }
 
-        // GET ALL PRODUCTS
         [HttpGet("GetProducts")]
         public IActionResult GetProducts()
         {
@@ -101,6 +101,7 @@ namespace practiceApplication.Controllers
 
             return Json(products);
         }
+
         [HttpPost("AddToCart")]
         public IActionResult AddToCart([FromBody] Models.CartModel cart)
         {
@@ -178,7 +179,8 @@ namespace practiceApplication.Controllers
                         Productname = reader["Productname"].ToString(),
                         Quantity = Convert.ToInt32(reader["Quantity"]),
                         Price = Convert.ToDecimal(reader["TotalPrice"]),
-                        Productquentity = Convert.ToInt32(reader["Productquentity"])  // ADD
+                        Productquentity = Convert.ToInt32(reader["Productquentity"]) ,
+                        Productdescription = reader["Productdescription"].ToString(),
                     });
                 }
             }
@@ -231,7 +233,7 @@ namespace practiceApplication.Controllers
             }
             catch (SqlException ex)
             {
-                // Catch stock errors specifically
+                
                 return Json(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
@@ -283,6 +285,7 @@ namespace practiceApplication.Controllers
                         productdescription = reader["Productdescription"],
                         price = reader["Price"],
                         Productimage = "https://localhost:7107/images/" + reader["Productimage"].ToString(),
+                        Productquentity = reader["Productquentity"]
                     });
                 }
 
@@ -299,7 +302,7 @@ namespace practiceApplication.Controllers
 
 
         [HttpPost("PlaceOrder")]
-        public IActionResult PlaceOrder(int ClientID)
+        public IActionResult PlaceOrder([FromBody] PlaceOrderRequest order)
         {
             try
             {
@@ -311,25 +314,26 @@ namespace practiceApplication.Controllers
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
 
-                        // Input parameter
-                        cmd.Parameters.AddWithValue("@ClientID", ClientID);
+                        cmd.Parameters.AddWithValue("@ClientID", order.ClientID);
+                        cmd.Parameters.AddWithValue("@CustomerName", order.CustomerName);
+                        cmd.Parameters.AddWithValue("@CustomerEmail", order.CustomerEmail);
+                        cmd.Parameters.AddWithValue("@CustomerAddress", order.CustomerAddress);
+                        cmd.Parameters.AddWithValue("@PaymentMethod", order.PaymentMethod);
 
-                        // Output parameter to get message from SQL
                         SqlParameter msgParam = new SqlParameter("@Message", SqlDbType.VarChar, 500)
                         {
                             Direction = ParameterDirection.Output
                         };
+
                         cmd.Parameters.Add(msgParam);
 
                         con.Open();
                         cmd.ExecuteNonQuery();
 
-                        // Get the message from SQL
                         message = msgParam.Value.ToString();
                     }
                 }
 
-                // Return message to frontend
                 return Json(new { success = true, message = message });
             }
             catch (Exception ex)
@@ -413,7 +417,6 @@ namespace practiceApplication.Controllers
         {
             if (w == null)
                 return BadRequest("Wishlist object is required");
-
             try
             {
                 using (SqlConnection con = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
@@ -425,7 +428,6 @@ namespace practiceApplication.Controllers
                     con.Open();
                     cmd.ExecuteNonQuery();
                 }
-
                 return Json(new { success = true, message = "Added to Wishlist" });
             }
             catch (Exception ex)
@@ -434,12 +436,13 @@ namespace practiceApplication.Controllers
             }
         }
 
+
+
         // Get Wishlist
         [HttpGet("GetWishlist")]
         public IActionResult GetWishlist(int ClientID)
         {
             List<object> wishlist = new List<object>();
-
             try
             {
                 using (SqlConnection con = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
@@ -461,7 +464,6 @@ namespace practiceApplication.Controllers
                         });
                     }
                 }
-
                 return Json(new { success = true, wishlist });
             }
             catch (Exception ex)
@@ -469,6 +471,9 @@ namespace practiceApplication.Controllers
                 return Json(new { success = false, message = ex.Message });
             }
         }
+
+
+
 
         [HttpPost("RemoveWishlist")]
         public IActionResult RemoveWishlist([FromBody] Wishlist w)
@@ -485,7 +490,6 @@ namespace practiceApplication.Controllers
                     con.Open();
                     cmd.ExecuteNonQuery();
                 }
-
                 return Json(new { success = true, message = "Removed from Wishlist" });
             }
             catch (Exception ex)
@@ -503,7 +507,6 @@ namespace practiceApplication.Controllers
         {
             if (w == null)
                 return BadRequest("Wishlist object is required");
-
             try
             {
                 using (SqlConnection con = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
@@ -518,7 +521,6 @@ namespace practiceApplication.Controllers
                     con.Open();
                     cmd.ExecuteNonQuery();
                 }
-
                 return Json(new { success = true, message = "Wishlist updated successfully" });
             }
             catch (Exception ex)
@@ -526,6 +528,8 @@ namespace practiceApplication.Controllers
                 return Json(new { success = false, message = ex.Message });
             }
         }
+
+
 
         // Get Wishlist with Notes and Tags
         [HttpGet("GetWishlistWithNotes")]
@@ -556,7 +560,6 @@ namespace practiceApplication.Controllers
                         });
                     }
                 }
-
                 return Json(new { success = true, wishlist });
             }
             catch (Exception ex)
@@ -565,6 +568,54 @@ namespace practiceApplication.Controllers
             }
         }
 
+        [HttpPost("InsertProduct")]
+        public async Task<IActionResult> InsertProduct(
+     [FromForm] string productname,
+     [FromForm] decimal price,
+     [FromForm] string productdescription,
+     [FromForm] int productquentity,
+     IFormFile image)
+        {
+
+            if (image == null || image.Length == 0)
+                return BadRequest("Image not uploaded");
+
+            // Correct path
+            string folderPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images");
+
+            // Create folder if not exists
+            if (!Directory.Exists(folderPath))
+                Directory.CreateDirectory(folderPath);
+
+            string fileName = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
+
+            string filePath = Path.Combine(folderPath, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await image.CopyToAsync(stream);
+            }
+
+            SqlConnection con = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+
+            SqlCommand cmd = new SqlCommand("ProductInsert", con);
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            cmd.Parameters.AddWithValue("@Productname", productname);
+            cmd.Parameters.AddWithValue("@Price", price);
+            cmd.Parameters.AddWithValue("@Productdescription", productdescription);
+            cmd.Parameters.AddWithValue("@productquentity", productquentity);
+            cmd.Parameters.AddWithValue("@productimage", fileName);
+
+            con.Open();
+            cmd.ExecuteNonQuery();
+            con.Close();
+
+            return Ok(new { message = "Product Added Successfully" });
+
+        }
+
+       
 
     }
 }
